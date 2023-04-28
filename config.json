@@ -1,0 +1,9 @@
+{
+  "login": "kursUser",
+  "password": "kursPswd",
+  "db_port": 5432,
+  "port": 8080,
+  "host": "localhost",
+  "name": "currency"
+
+}
