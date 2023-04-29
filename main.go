@@ -1,21 +1,22 @@
 package main
 
 import (
-    "database/sql"
-    "encoding/json"
-    "fmt"
-    "log"
-    "net/http"
-    "strconv"
-    "strings"
-    "time"
+	"database/sql"
+	"encoding/json"
+	"encoding/xml"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"time"
 
-    "github.com/gorilla/mux"
-    _ "github.com/lib/pq"
+	"github.com/gorilla/mux"
+	_ "github.com/lib/pq"
 )
 
 type Config struct {
-    Port       string `json:"port"`
+    Port       int `json:"port"`
     DBHost     string `json:"host"`
     DBPort     int    `json:"db_port"`
     DBName     string `json:"name"`
@@ -36,21 +37,21 @@ type Currency struct {
 	Description float64 `xml:"description"`
 }
 
+  var config = loadConfig()
+	 var db = initDB(config)
 
 
 func main() {
    
-    config := loadConfig()
-    db := initDB(config)
+	 
     r := mux.NewRouter()
-
  
-    r.HandleFunc("/currency/save/{date}", saveCurrencyHandler(db)).Methods("GET")
-    r.HandleFunc("/currency/{date}/{code}", getCurrencyHandler(db)).Methods("GET")
+    r.HandleFunc("/currency/save/{date}", saveCurrency).Methods("GET")
+    r.HandleFunc("/currency/{date}/{code}", getCurrency).Methods("GET")
 
    
-    log.Printf("Starting server on port %s\n", config.Port)
-    log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", config.Port), r))
+    log.Printf("Starting server on port %d\n", config.Port)
+    log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", config.Port), r))
 }
 
 func loadConfig() Config {
@@ -76,27 +77,32 @@ func initDB(config Config) *sql.DB {
     return db
 }
 
-go func saveCurrency(date string) error {
+ func saveCurrency(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	date := params["date"]
 	resp, err := http.Get(fmt.Sprintf("https://nationalbank.kz/rss/get_rates.cfm?fdate=%s", date))
+	
 	if err != nil {
-			return err
+			fmt.Print(err)
 	}
 	defer resp.Body.Close()
 
 	xmlData, err := ioutil.ReadAll(resp.Body)
+	// fmt.Println("XML", xmlData)
 	if err != nil {
-			return err
+			fmt.Print(err)
 	}
 
 	var currencyRates CurrencyRates
 	err = xml.Unmarshal(xmlData, &currencyRates)
+	fmt.Print(currencyRates)
 	if err != nil {
-			return err
+			fmt.Print(err)
 	}
 
 	tx, err := db.Begin()
 	if err != nil {
-			return err
+			fmt.Print(err)
 	}
 	defer func() {
 			if err := recover(); err != nil {
@@ -104,30 +110,28 @@ go func saveCurrency(date string) error {
 			}
 	}()
 
-	for _, item := range currencyRates..Items {
+	for _, item := range currencyRates.Items {
 			currency := Currency{
-					Name:  item.FullName,
-					Code:  item.Title,
-					Value: item.Description,
-					Date:  date,
+				  Fullname:  item.Fullname,
+					Title :  item.Title,
+					Description: item.Description,
 			}
-			_, err = tx.Exec("INSERT INTO R_CURRENCY (NAME, CODE, VALUE, A_DATE) VALUES ($1, $2, $3, $4)", currency.Name, currency.Code, currency.Value, currency.Date)
+			_, err = tx.Exec("INSERT INTO R_CURRENCY (NAME, CODE, VALUE, A_DATE) VALUES ($1, $2, $3)", currency.Fullname, currency.Title, currency.Description)
 			if err != nil {
 					tx.Rollback()
-					return err
+					fmt.Print(err)
 			}
 	}
 
 	err = tx.Commit()
 	if err != nil {
-			return err
+			fmt.Print(err)
 	}
 
-	return nil
 }
 
 
-go func getCurrency(w http.ResponseWriter, r *http.Request) {
+ func getCurrency(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	dateStr := params["date"]
 	code := params["code"]
@@ -136,29 +140,33 @@ go func getCurrency(w http.ResponseWriter, r *http.Request) {
 	date, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
 			http.Error(w, "Invalid date format", http.StatusBadRequest)
-			return
+			fmt.Print(err)
 	}
 
 	var query string
-	var args []interface{}
+	var rows *sql.Rows
 	if code == "" {
 			// If code is not provided, select all currencies for the given date
 			query = "SELECT name, code, value FROM r_currency WHERE a_date = $1"
-			args = []interface{}{date}
+			rows, err := db.Query(query, date)
+			fmt.Print(err)
+			defer rows.Close()
 	} else {
 			// If code is provided, select the currency with the given code for the given date
 			query = "SELECT name, code, value FROM r_currency WHERE a_date = $1 AND code = $2"
-			args = []interface{}{date, code}
+			rows, err := db.Query(query, date, code)
+			fmt.Print(err)
+			defer rows.Close()
 	}
 
 	// Query the database
-	rows, err := db.Query(query, args...)
+	
 	if err != nil {
 			log.Printf("Error querying database: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
+			fmt.Print(err) 
 	}
-	defer rows.Close()
+	
 
 	// Build the response
 	var result []map[string]interface{}
@@ -170,7 +178,7 @@ go func getCurrency(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 					log.Printf("Error scanning row: %v", err)
 					http.Error(w, "Internal server error", http.StatusInternalServerError)
-					return
+					fmt.Print(err)
 			}
 			result = append(result, map[string]interface{}{
 					"name":  name,
@@ -182,5 +190,6 @@ go func getCurrency(w http.ResponseWriter, r *http.Request) {
 	// Write the response
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+	
 }
 
