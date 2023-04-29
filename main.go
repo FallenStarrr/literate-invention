@@ -9,7 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
+	_"time"
 
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
@@ -64,6 +64,7 @@ func loadConfig() Config {
     if err = jsonParser.Decode(&config); err != nil {
         log.Fatalf("Failed to parse config file: %v", err)
     }
+		fmt.Println(config)
     return config
 }
 
@@ -95,71 +96,69 @@ func initDB(config Config) *sql.DB {
 
 	var currencyRates CurrencyRates
 	err = xml.Unmarshal(xmlData, &currencyRates)
-	fmt.Print(currencyRates)
+	// fmt.Print(currencyRates)
 	if err != nil {
 			fmt.Print(err)
 	}
 
-	tx, err := db.Begin()
-	if err != nil {
-			fmt.Print(err)
-	}
-	defer func() {
-			if err := recover(); err != nil {
-					tx.Rollback()
-			}
-	}()
+	
 
+ connStr := fmt.Sprintf("host=%s port=%d dbname=%s user=%s password=%s sslmode=disable",
+        config.DBHost, config.DBPort, config.DBName, config.DBUser, config.DBPassword)
+fmt.Println(connStr)
 	for _, item := range currencyRates.Items {
 			currency := Currency{
 				  Fullname:  item.Fullname,
 					Title :  item.Title,
 					Description: item.Description,
 			}
-			_, err = tx.Exec("INSERT INTO R_CURRENCY (NAME, CODE, VALUE, A_DATE) VALUES ($1, $2, $3)", currency.Fullname, currency.Title, currency.Description)
+			_, err = db.Exec("INSERT INTO test (title, code, value) VALUES ($1, $2, $3)", currency.Fullname, currency.Title, currency.Description)
 			if err != nil {
-					tx.Rollback()
 					fmt.Print(err)
 			}
 	}
 
-	err = tx.Commit()
-	if err != nil {
-			fmt.Print(err)
-	}
 
 }
 
 
  func getCurrency(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-	dateStr := params["date"]
-	code := params["code"]
+	// params := mux.Vars(r)
+	// dateStr := params["date"]
+	// code := params["code"]
 
 	// Parse the date parameter
-	date, err := time.Parse("2006-01-02", dateStr)
-	if err != nil {
-			http.Error(w, "Invalid date format", http.StatusBadRequest)
-			fmt.Print(err)
-	}
+	// date, err := time.Parse("15.04.2021", dateStr)
+	// fmt.Println(date)
+	// if err != nil {
+	// 		http.Error(w, "Invalid date format", http.StatusBadRequest)
+	// 		fmt.Print(err)
+	// }
 
 	var query string
-	var rows *sql.Rows
-	if code == "" {
-			// If code is not provided, select all currencies for the given date
-			query = "SELECT name, code, value FROM r_currency WHERE a_date = $1"
-			rows, err := db.Query(query, date)
-			fmt.Print(err)
-			defer rows.Close()
-	} else {
-			// If code is provided, select the currency with the given code for the given date
-			query = "SELECT name, code, value FROM r_currency WHERE a_date = $1 AND code = $2"
-			rows, err := db.Query(query, date, code)
-			fmt.Print(err)
-			defer rows.Close()
-	}
+	
+	// if code == "" {
+	// 		// If code is not provided, select all currencies for the given date
+	// 		query = "SELECT * FROM test"
+	// 		rows, err := db.Query(query, date)
+	// 		fmt.Print(err)
+	// 		defer rows.Close()
+	// } else {
+	// 		// If code is provided, select the currency with the given code for the given date
+	// 		query = "SELECT name, code, value FROM r_currency WHERE a_date = $1 AND code = $2"
+	// 		rows, err := db.Query(query, date, code)
+	// 		fmt.Print(err)
+	// 		defer rows.Close()
+	// }
+
+
+	    
+
 
 	// Query the database
+	query = "SELECT * FROM test"
+	rows, err:= db.Query(query)
+			
 	
 	if err != nil {
 			log.Printf("Error querying database: %v", err)
