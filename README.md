@@ -11,5 +11,5 @@ You can get currency info from db: /currency/{date}/{code}
 
 Example:
 go run main.go
-http://localhost:8081/currency/15.04.2021/21
-http://localhost:8081/currency/save/15.04.2021
+# http://localhost:8081/currency/15.04.2021/21
+# http://localhost:8081/currency/save/15.04.2021
